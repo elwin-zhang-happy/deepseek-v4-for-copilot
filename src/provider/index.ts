@@ -2,7 +2,8 @@ import vscode from 'vscode';
 import { AuthManager } from '../auth';
 import { DeepSeekClient } from '../client';
 import { getApiModelId, getBaseUrl, getMaxTokens } from '../config';
-import { API_KEY_REQUIRED_DETAIL, MODELS, THINKING_EFFORT_CONFIGURATION_SCHEMA } from '../consts';
+import { MODELS } from '../consts';
+import { t } from '../i18n';
 import { logger } from '../logger';
 import type { DeepSeekToolCall, ModelDefinition } from '../types';
 import { type ReasoningEntry, pruneReasoningCache } from './cache';
@@ -41,10 +42,13 @@ type ModelConfigurationOptions = vscode.ProvideLanguageModelChatResponseOptions 
  * `statusIcon` renders a leading icon (e.g. warning when key missing), and
  * `configurationSchema` declares the per-model dropdown schema.
  */
+/** Shape of the per-model configuration schema rendered by Copilot Chat's model picker. */
+type ThinkingEffortConfigurationSchema = ReturnType<typeof buildThinkingEffortSchema>;
+
 type ModelPickerChatInformation = vscode.LanguageModelChatInformation & {
 	readonly isUserSelectable: boolean;
 	readonly statusIcon?: vscode.ThemeIcon;
-	readonly configurationSchema?: typeof THINKING_EFFORT_CONFIGURATION_SCHEMA;
+	readonly configurationSchema?: ThinkingEffortConfigurationSchema;
 };
 
 /**
@@ -109,7 +113,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 	async clearApiKey(): Promise<void> {
 		await this.authManager.deleteApiKey();
 		this.onDidChangeLanguageModelChatInformationEmitter.fire();
-		vscode.window.showInformationMessage('DeepSeek API key removed.');
+		vscode.window.showInformationMessage(t('auth.removed'));
 	}
 
 	async hasApiKey(): Promise<boolean> {
@@ -165,9 +169,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 	): Promise<void> {
 		const apiKey = await this.authManager.getApiKey();
 		if (!apiKey) {
-			throw new Error(
-				'DeepSeek API key not configured. Run "DeepSeek: Set API Key" from the Command Palette.',
-			);
+			throw new Error(t('auth.notConfigured'));
 		}
 
 		const baseUrl = getBaseUrl();
@@ -325,14 +327,57 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 
 // ---- Helpers ----
 
+/**
+ * Build the thinking effort configuration schema with translated labels.
+ * Called inside toChatInfo() so translations reflect the current locale.
+ */
+function buildThinkingEffortSchema() {
+	return {
+		properties: {
+			reasoningEffort: {
+				type: 'string',
+				title: t('status.thinking'),
+				enum: ['none', 'high', 'max'],
+				enumItemLabels: [t('thinking.none'), t('thinking.high'), t('thinking.max')],
+				enumDescriptions: [
+					t('thinking.none.desc'),
+					t('thinking.high.desc'),
+					t('thinking.max.desc'),
+				],
+				default: 'high',
+				group: 'navigation',
+			},
+		},
+	} as const;
+}
+
+/**
+ * Derive the i18n key for a model's detail line from the model ID.
+ * Returns `undefined` when the key is missing from *both* locales —
+ * `toChatInfo()` will then fall back to `m.detail`. When the key exists
+ * in English but not the active locale, the English translation is used
+ * (per `t()`'s fallback behaviour).
+ */
+function resolveDetailKey(m: ModelDefinition): string | undefined {
+	// Map known DeepSeek V4 models: deepseek-v4-flash → model.flash.detail
+	const suffix = m.id.startsWith('deepseek-v4-') ? m.id.slice('deepseek-v4-'.length) : m.id;
+	const key = `model.${suffix}.detail`;
+	// t() returns the raw key string when no translation is defined in either
+	// locale — treat that as "no translation available" and fall back.
+	const translated = t(key);
+	return translated !== key ? key : undefined;
+}
+
 function toChatInfo(m: ModelDefinition, hasApiKey: boolean): ModelPickerChatInformation {
+	const detailKey = resolveDetailKey(m);
+	const modelDetail = detailKey ? t(detailKey) : m.detail;
 	return {
 		id: m.id,
 		name: m.name,
 		family: m.family,
 		version: m.version,
-		detail: hasApiKey ? m.detail : API_KEY_REQUIRED_DETAIL,
-		tooltip: hasApiKey ? undefined : API_KEY_REQUIRED_DETAIL,
+		detail: hasApiKey ? modelDetail : t('auth.apiKeyRequiredDetail'),
+		tooltip: hasApiKey ? undefined : t('auth.apiKeyRequiredDetail'),
 		statusIcon: hasApiKey ? undefined : new vscode.ThemeIcon('warning'),
 		maxInputTokens: m.maxInputTokens,
 		maxOutputTokens: m.maxOutputTokens,
@@ -341,9 +386,7 @@ function toChatInfo(m: ModelDefinition, hasApiKey: boolean): ModelPickerChatInfo
 			toolCalling: m.capabilities.toolCalling,
 			imageInput: m.capabilities.imageInput,
 		},
-		...(m.capabilities.thinking
-			? { configurationSchema: THINKING_EFFORT_CONFIGURATION_SCHEMA }
-			: {}),
+		...(m.capabilities.thinking ? { configurationSchema: buildThinkingEffortSchema() } : {}),
 	};
 }
 

@@ -23,30 +23,6 @@ export const WELCOME_SHOWN_KEY = 'deepseek-copilot.welcomeShown';
 /** Walkthrough contribution ID. */
 export const WALKTHROUGH_ID = 'Vizards.deepseek-v4-for-copilot#deepseekGettingStarted';
 
-// ---- Model picker ----
-
-/** Detail text shown in the model picker when no API key is configured. */
-export const API_KEY_REQUIRED_DETAIL = 'Please run DeepSeek: Set API Key to configure.';
-
-/** Per-model configuration schema consumed by Copilot Chat's model picker. */
-export const THINKING_EFFORT_CONFIGURATION_SCHEMA = {
-	properties: {
-		reasoningEffort: {
-			type: 'string',
-			title: 'Thinking Effort',
-			enum: ['none', 'high', 'max'],
-			enumItemLabels: ['None', 'High', 'Max'],
-			enumDescriptions: [
-				'Disable thinking for faster responses',
-				'Recommended for most tasks',
-				'Maximum reasoning depth for complex agent tasks',
-			],
-			default: 'high',
-			group: 'navigation',
-		},
-	},
-} as const;
-
 // ---- Vision proxy ----
 
 /** Default model ID used for the vision proxy when auto-detection is enabled. */
@@ -58,6 +34,13 @@ export const DEFAULT_VISION_MODEL_ID = 'oswe-vscode-prime';
  */
 export const IMAGE_DESCRIPTION_PROMPT =
 	'Describe the visual contents of this image in detail, including any text, objects, people, or context that would be relevant for understanding it. Focus on factual visual elements.';
+
+/**
+ * Stable fallback marker inserted into the chat prompt when the vision proxy
+ * fails to describe an image. Keep this in English and out of i18n so prompt
+ * shape and cache behaviour do not vary by VS Code display language.
+ */
+export const IMAGE_DESCRIPTION_UNAVAILABLE = '[Image Description unavailable]';
 
 // ---- Cache ----
 
